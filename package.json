@@ -1,0 +1,13 @@
+{
+  "name": "eve-web-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Eve web prototype (Phase 1): calm safety & wellbeing companion UI driven by seed data",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
