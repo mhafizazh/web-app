@@ -133,8 +133,8 @@
       if (!byPlace[m.placeId]) byPlace[m.placeId] = {
         placeId: m.placeId,
         name: m.placeName || sp.name,
-        lat: sp.lat,
-        lng: sp.lng,
+        lat: typeof m.lat === 'number' ? m.lat : sp.lat,
+        lng: typeof m.lng === 'number' ? m.lng : sp.lng,
         moments: []
       };
       byPlace[m.placeId].moments.push(m);
@@ -405,6 +405,7 @@
   // --- Moments ---
   function renderMoments() {
     const range = 'week'; // spec shows week counts/tabs context
+    renderWatchCheckins();
     const counts = {
       all: taggedInRange(range,'all').length,
       good: taggedInRange(range,'good').length,
@@ -447,6 +448,24 @@
     $('#momentsContent').innerHTML = html;
     $$('[data-open-route]', $('#momentsContent')).forEach(b=>b.addEventListener('click', openCalmerRoute));
     $$('[data-place-detail]', $('#momentsContent')).forEach(b=>b.addEventListener('click', ()=> openPlaceDetail(b.dataset.placeDetail, b.dataset.placeType)));
+  }
+
+  function renderWatchCheckins() {
+    const events = state.moments
+      .filter(m => m.source === 'watch')
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 8);
+    const labels = { good: 'I’m lifted', bad: 'I’m drained', unsafe: 'I’m unsafe' };
+    const html = events.length
+      ? events.map(m => {
+          const extra = m.tag === 'unsafe'
+            ? `${m.shared ? 'Shared anonymously' : 'Private'}${m.note ? ` · ${esc(m.note)}` : ''}`
+            : 'Private check-in';
+          return `<div class="setting-item"><div><strong>${esc(labels[m.tag] || 'Watch check-in')}</strong><span class="sub">${esc(fmtDayTime(m.ts))} · ${esc(m.placeName || 'Watch location')} · ${extra}</span></div><span class="shape ${m.tag === 'unsafe' ? 'diamond' : 'circle'} ${m.tag}"></span></div>`;
+        }).join('')
+      : '<p class="small muted">No check-ins received from the watch yet. Watch inputs will appear here when the web app server receives them.</p>';
+    const target = document.getElementById('watchCheckins');
+    if (target) target.innerHTML = `<h3>Latest from your watch</h3><div class="settings-list">${html}</div>`;
   }
 
   function openPlaceDetail(placeId, type) {
@@ -709,6 +728,99 @@
     $('#overlaySheet').innerHTML = '';
   }
 
+  // --- Watch input sync (from Garmin watch -> web app) ---
+  function nearestPlace(lat, lon) {
+    if (typeof lat !== 'number' || typeof lon !== 'number' || !isFinite(lat) || !isFinite(lon)) return null;
+    let best = null;
+    let bestD = Infinity;
+    Object.values(SEED.places).forEach(p => {
+      if (typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
+      const dLat = (lat - p.lat);
+      const dLng = (lon - p.lng);
+      const d = dLat * dLat + dLng * dLng;
+      if (d < bestD) { bestD = d; best = p; }
+    });
+    // ~0.003 degrees ~ 300m rough threshold
+    return bestD <= (0.003 * 0.003) ? best : null;
+  }
+
+  function watchEventToMoment(ev) {
+    const tag = ev && ev.tag === 'good' ? 'good' : ev && ev.tag === 'bad' ? 'bad' : 'unsafe';
+    const ts = Number(ev && (ev.ts || (ev.time ? ev.time * 1000 : 0))) || Date.now();
+    const lat = (ev && typeof ev.lat === 'number') ? ev.lat : (ev && ev.lat != null && isFinite(Number(ev.lat)) ? Number(ev.lat) : null);
+    const lon = (ev && typeof ev.lon === 'number') ? ev.lon : (ev && ev.lon != null && isFinite(Number(ev.lon)) ? Number(ev.lon) : null);
+    const near = nearestPlace(lat, lon);
+    const placeId = near ? near.id : (lat != null && lon != null ? ('watchloc-' + ts) : 'unknown-watch');
+    const placeName = near ? near.name : (lat != null && lon != null ? 'Watch location' : 'Unknown location');
+    const reason = ev && ev.reason != null ? String(ev.reason) : null;
+
+    const noteMap = { followed: 'being followed', harassment: 'harassment', lighting: 'poor lighting', isolated: 'nobody around' };
+    const moment = {
+      id: 'watch-' + Number(ev && ev.time ? ev.time : Math.floor(ts / 1000)) + '-' + tag,
+      spikeId: 'watch-spike-' + Number(ev && ev.time ? ev.time : Math.floor(ts / 1000)),
+      tag: tag, // good (I'm lifted), bad (I'm drained), unsafe (I'm unsafe)
+      feeling: ev && ev.feeling ? String(ev.feeling) : (tag === 'good' ? 'lifted' : tag === 'bad' ? 'drained' : 'unsafe'),
+      placeId: placeId,
+      placeName: placeName,
+      lat: lat != null ? lat : (near ? near.lat : null),
+      lng: lon != null ? lon : (near ? near.lng : null),
+      ts: ts,
+      hrPeak: tag === 'good' ? 116 : tag === 'bad' ? 122 : 130,
+      source: 'watch',
+    };
+
+    if (tag === 'unsafe') {
+      // Unsafe data transferred from watch must be accurate (no mistakes).
+      moment.shared = Boolean(ev && ev.shared);
+      moment.shareReason = reason;
+      moment.note = reason ? (noteMap[reason] || reason) : '';
+    } else {
+      // Lifted/drained inputs are private check-ins.
+      moment.shared = false;
+      moment.shareReason = null;
+      moment.note = '';
+    }
+
+    return moment;
+  }
+
+  function mergeWatchEvents(events) {
+    if (!Array.isArray(events) || !events.length) return false;
+    let changed = false;
+    events.forEach(ev => {
+      const m = watchEventToMoment(ev);
+      const idx = state.moments.findIndex(x => x.id === m.id);
+      if (idx >= 0) {
+        const prev = JSON.stringify(state.moments[idx]);
+        state.moments[idx] = Object.assign({}, state.moments[idx], m);
+        if (prev !== JSON.stringify(state.moments[idx])) changed = true;
+      } else {
+        state.moments.push(m);
+        changed = true;
+      }
+    });
+    if (changed) {
+      state.moments.sort((a, b) => a.ts - b.ts);
+      saveState();
+    }
+    return changed;
+  }
+
+  async function fetchWatchEvents() {
+    try {
+      const res = await fetch('/api/watch-events', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const changed = mergeWatchEvents(data && data.events ? data.events : []);
+      if (changed) {
+        renderCurrentTab();
+        renderDevPanel();
+      }
+    } catch (_) {
+      // ignore fetch errors (e.g. file:// or server not ready)
+    }
+  }
+
   // --- Simulate watch ---
   function renderDevPanel() {
     const panel = $('#devPanel');
@@ -807,6 +919,10 @@
     renderOnboarding();
     renderApp();
     renderDevPanel();
+    // Pull any inputs already sent from the watch, then keep syncing.
+    fetchWatchEvents();
+    setInterval(fetchWatchEvents, 3000);
+    window.addEventListener('focus', fetchWatchEvents);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

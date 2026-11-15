@@ -2,8 +2,8 @@
 
 Phase 1 web prototype of **Eve** — *“Live fully. Eve has your back.”* — built
 from `../eve_mobile_app_build_spec.md`. This implements the phone app
-experience as a browser-based web app (demo-ready, no real watch/backend
-required).
+experience as a browser-based web app. A local HTTP endpoint can also receive
+live check-ins from the Garmin simulator/watch.
 
 ## Run
 
@@ -34,6 +34,10 @@ No `npm install` required (Node.js built-ins only). Node 18+ recommended.
   list.
 - **Simulate watch:** developer menu to send fake `spike`, `tag`, and
   `share_decision` messages (drives the core loop on seed data).
+- **Live watch inputs:** `POST /api/watch-events` accepts lifted, drained, and
+  unsafe check-ins; `GET /api/watch-events` returns received events. The Moments
+  tab shows the latest watch check-ins, and watch GPS coordinates are used for
+  map pins when available.
 
 ## Seed data
 
@@ -42,7 +46,7 @@ week: 29 good, 38 bad, 4 unsafe) is defined in `public/seed.js`.
 
 ## Notes
 
-- Prototype runs fully client-side with `localStorage` for demo state; see
-  `DECISIONS.md` for implementation choices (schematic map instead of external
-  map SDK keys, simulated onboarding/auth/community, etc.).
+- Prototype state is stored in browser `localStorage`; watch events are kept in
+  server memory and are cleared when the server restarts. See `DECISIONS.md` for
+  other implementation choices and demo limitations.
 - Served as a responsive web app suitable for phone-sized screens.

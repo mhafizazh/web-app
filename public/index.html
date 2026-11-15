@@ -70,6 +70,7 @@
 
         <!-- Moments tab -->
         <section id="tab-moments" class="tab-screen hidden" aria-label="Moments">
+          <div class="card raised" id="watchCheckins" aria-live="polite"></div>
           <div class="segmented inset moments-tabs" id="momentsTabs" role="tablist"></div>
           <p class="insight" id="momentsInsight"></p>
           <div id="momentsContent"></div>
@@ -86,13 +87,15 @@
         </section>
       </main>
 
-      <nav class="bottom-nav" aria-label="Main">
-        <button type="button" class="nav-item active" data-tab="map" aria-label="Map"><span class="nav-icon">🗺️</span><span>Map</span></button>
-        <button type="button" class="nav-item" data-tab="moments" aria-label="Moments"><span class="nav-icon">✨</span><span>Moments</span></button>
-        <button type="button" class="nav-item" data-tab="safety" aria-label="Safety"><span class="nav-icon">🛡️</span><span>Safety</span></button>
-        <button type="button" class="nav-item" data-tab="me" aria-label="Me"><span class="nav-icon">🌸</span><span>Me</span></button>
-      </nav>
     </div>
+
+    <!-- Keep navigation outside the scrolling app content so it stays fixed on mobile. -->
+    <nav class="bottom-nav" aria-label="Main">
+      <button type="button" class="nav-item active" data-tab="map" aria-label="Map"><span class="nav-icon">🗺️</span><span>Map</span></button>
+      <button type="button" class="nav-item" data-tab="moments" aria-label="Moments"><span class="nav-icon">✨</span><span>Moments</span></button>
+      <button type="button" class="nav-item" data-tab="safety" aria-label="Safety"><span class="nav-icon">🛡️</span><span>Safety</span></button>
+      <button type="button" class="nav-item" data-tab="me" aria-label="Me"><span class="nav-icon">🌸</span><span>Me</span></button>
+    </nav>
 
     <!-- Overlays -->
     <div id="overlay" class="overlay hidden" aria-hidden="true">
